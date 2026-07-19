@@ -23,13 +23,24 @@ class Capabilities:
     model: str
     context_size: int
     rate_limit_rpm: int
+    recommended_concurrency: int | None = None
     supports_streaming: bool = True
+    context_source: str = "fallback"
+    concurrency_source: str = "fallback"
 
 
 @dataclass
 class Turn:
     role: str
     content: str
+
+
+@dataclass
+class RequestMetadata:
+    request_id: int
+    input_tokens: int
+    language: str
+    topic: str
 
 
 @dataclass
@@ -40,3 +51,7 @@ class RequestResult:
     total_tokens: int = 0
     error: str | None = None
     latency_ms: float = 0.0
+    request_id: int = 0
+    requested_input_tokens: int = 0
+    prompt_language: str = ""
+    prompt_topic: str = ""

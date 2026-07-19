@@ -1,0 +1,29 @@
+question_pool:
+  en:
+    - "Explain in detail how {topic} works."
+    - "Write a comprehensive essay about {topic}."
+    - "List and describe all major aspects of {topic}."
+    - "Compare and contrast different approaches to {topic}."
+    - "Analyze the history, current state, and future of {topic}."
+  zh:
+    - "详细解释{topic}的工作原理。"
+    - "写一篇关于{topic}的全面论述。"
+    - "列举并描述{topic}的所有主要方面。"
+    - "比较{topic}的不同方法。"
+    - "分析{topic}的历史、现状与未来。"
+
+topics:
+  en: ["quantum computing", "machine learning", "climate change", "blockchain", "space exploration", "biology", "economics"]
+  zh: ["量子计算", "人工智能", "气候变化", "区块链", "太空探索", "生物学", "经济学"]
+
+filler_pool:
+  en:
+    - "Cover definitions, concrete examples, practical applications, and common misconceptions."
+    - "Compare alternative approaches, their trade-offs, limitations, and appropriate use cases."
+    - "Include historical context, current developments, edge cases, and possible future directions."
+    - "Organize the answer clearly and support each conclusion with transparent reasoning."
+  zh:
+    - "请涵盖基本定义、具体示例、实际应用以及常见误区。"
+    - "请比较不同方法的取舍、局限性和各自适用的场景。"
+    - "请补充历史背景、当前进展、边界情况以及未来可能的发展方向。"
+    - "请清晰组织答案，并为每个结论提供透明、可检查的推理。"
