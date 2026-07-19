@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch
-from eattoken.providers.openai import OpenAIProvider
+from eattoken.providers.openai import OpenAIProvider, _result_from_usage
 from eattoken.core.models import Capabilities, ProviderType, Turn, RequestResult
 
 
@@ -55,3 +55,15 @@ def test_openai_format_messages():
     turns = [Turn(role="user", content="hi"), Turn(role="assistant", content="bye")]
     out = provider.format_messages(turns)
     assert out == [{"role": "user", "content": "hi"}, {"role": "assistant", "content": "bye"}]
+
+
+def test_openai_uses_api_usage_values():
+    result = _result_from_usage({
+        "prompt_tokens": 101,
+        "completion_tokens": 23,
+        "total_tokens": 124,
+        "prompt_tokens_details": {"cached_tokens": 40},
+        "completion_tokens_details": {"reasoning_tokens": 7},
+    })
+    assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (101, 23, 124)
+    assert (result.cached_tokens, result.reasoning_tokens) == (40, 7)

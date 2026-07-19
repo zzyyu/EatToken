@@ -39,6 +39,7 @@ class Turn:
 class RequestMetadata:
     request_id: int
     input_tokens: int
+    local_estimated_input_tokens: int
     language: str
     topic: str
 
@@ -49,6 +50,8 @@ class RequestResult:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     total_tokens: int = 0
+    cached_tokens: int = 0
+    reasoning_tokens: int = 0
     error: str | None = None
     latency_ms: float = 0.0
     request_id: int = 0

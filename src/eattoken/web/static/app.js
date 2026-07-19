@@ -6,9 +6,10 @@ const TRANSLATIONS = {
     app_subtitle: "Rapidly consume LLM API tokens",
     form_api_url: "API URL",
     form_api_key: "API Key",
+    form_saved_local: "Saved in this browser for automatic restore.",
     form_provider: "Provider",
     form_model: "Model",
-    form_target_tokens: "Target Tokens",
+    form_target_tokens: "Target API Tokens (not credits)",
     form_context_size: "Context Size Override",
     form_max_input: "Request Size",
     form_max_output: "Max Output Tokens",
@@ -29,8 +30,12 @@ const TRANSLATIONS = {
     button_start: "Start",
     button_stop: "Stop",
     button_switch_lang: "中文",
-    progress_consumed: "Consumed",
-    progress_target: "Target",
+    progress_consumed: "API Tokens (server)",
+    progress_prompt: "Prompt Tokens",
+    progress_completion: "Completion Tokens",
+    progress_cached: "Cached Input",
+    progress_reasoning: "Reasoning Tokens",
+    progress_target: "API Token Target",
     progress_qps: "QPS",
     progress_in_flight: "In flight",
     progress_success: "Success",
@@ -50,17 +55,19 @@ const TRANSLATIONS = {
     logs_empty: "No run yet. Configure a provider and start when ready.",
     progress_infinite: "Infinite",
     status_stopping: "Stopping...",
+    usage_note: "Counts come from the API usage response. Provider credits are billing units and are not equal to tokens.",
   },
   zh: {
     app_title: "EatToken",
     app_subtitle: "快速消耗 LLM API token",
     form_api_url: "API 地址",
     form_api_key: "API Key",
+    form_saved_local: "保存在当前浏览器中，下次进入时自动带出。",
     form_provider: "协议类型",
     form_model: "模型名称",
-    form_target_tokens: "目标 Token 数",
+    form_target_tokens: "目标 API Token（非 Credit）",
     form_context_size: "上下文长度覆盖",
-    form_max_input: "单个请求大小",
+    form_max_input: "目标服务端输入 Token",
     form_max_output: "单次最大输出",
     form_request_timeout: "单请求超时",
     form_concurrency: "并发数覆盖",
@@ -72,15 +79,19 @@ const TRANSLATIONS = {
     placeholder_model: "gpt-4o",
     placeholder_target_tokens: "留空则持续运行，直到手动停止",
     placeholder_context_size: "默认从模型注册表探测，需要时手动覆盖",
-    placeholder_max_input: "每个请求默认 1024 Token",
+    placeholder_max_input: "每个请求期望服务端实际收到 1024 Token",
     placeholder_max_output: "每次响应默认最多 256 Token",
     placeholder_request_timeout: "默认 30 秒",
     placeholder_concurrency: "自适应：从 1 开始逐步增加",
     button_start: "开始消耗",
     button_stop: "停止",
     button_switch_lang: "English",
-    progress_consumed: "已消耗",
-    progress_target: "目标",
+    progress_consumed: "API Token（服务端）",
+    progress_prompt: "实际输入 Token",
+    progress_completion: "实际输出 Token",
+    progress_cached: "缓存输入 Token",
+    progress_reasoning: "推理 Token",
+    progress_target: "API Token 目标",
     progress_qps: "QPS",
     progress_in_flight: "请求中",
     progress_success: "成功",
@@ -100,6 +111,7 @@ const TRANSLATIONS = {
     logs_empty: "暂无运行记录，完成左侧配置后即可开始。",
     progress_infinite: "无限运行",
     status_stopping: "正在停止...",
+    usage_note: "以上数量取自接口 usage 返回值；供应商 Credit 是计费单位，不等同于 Token，不能按 1:1 对比。",
   },
 };
 
@@ -108,6 +120,7 @@ let currentRunId = null;
 let eventSource = null;
 let serverTranslations = null;
 let lastLogId = 0;
+const FORM_STORAGE_KEY = "eattoken-form-config-v1";
 
 function $(id) { return document.getElementById(id); }
 
@@ -191,6 +204,10 @@ function setStatus(key, state = "") {
 
 function updateStats(data) {
   $("stat-consumed").textContent = formatNumber(data.total_tokens);
+  $("stat-prompt").textContent = formatNumber(data.prompt_tokens || 0);
+  $("stat-completion").textContent = formatNumber(data.completion_tokens || 0);
+  $("stat-cached").textContent = formatNumber(data.cached_tokens || 0);
+  $("stat-reasoning").textContent = formatNumber(data.reasoning_tokens || 0);
   $("stat-target").textContent = data.target != null ? formatNumber(data.target) : "∞";
   $("stat-qps").textContent = data.qps.toFixed(1);
   $("stat-in-flight").textContent = formatNumber(data.in_flight || 0);
@@ -239,9 +256,41 @@ function hydrateForm(config) {
   if (!config) return;
   const form = $("config-form");
   for (const [name, value] of Object.entries(config)) {
-    if (value == null || name === "api_key") continue;
+    if (value == null) continue;
     const control = form.elements.namedItem(name);
     if (control) control.value = String(value);
+  }
+}
+
+function saveForm() {
+  const form = $("config-form");
+  if (!form) return;
+  const config = {};
+  for (const control of form.elements) {
+    if (!control.name) continue;
+    if (control.type === "checkbox") {
+      config[control.name] = control.checked;
+    } else {
+      config[control.name] = control.value;
+    }
+  }
+  try {
+    localStorage.setItem(FORM_STORAGE_KEY, JSON.stringify(config));
+  } catch {
+    // Storage can be unavailable in private/restricted browser contexts.
+  }
+}
+
+function restoreSavedForm() {
+  try {
+    const raw = localStorage.getItem(FORM_STORAGE_KEY);
+    if (!raw) return false;
+    const config = JSON.parse(raw);
+    if (!config || typeof config !== "object") return false;
+    hydrateForm(config);
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -355,11 +404,17 @@ function toggleButtons(running) {
 document.addEventListener("DOMContentLoaded", async () => {
   await detectLang();
   await restoreCurrentRun();
+  restoreSavedForm();
 
   $("lang-toggle").addEventListener("click", toggleLang);
 
-  $("config-form").addEventListener("submit", (e) => {
+  const configForm = $("config-form");
+  configForm.addEventListener("input", saveForm);
+  configForm.addEventListener("change", saveForm);
+
+  configForm.addEventListener("submit", (e) => {
     e.preventDefault();
+    saveForm();
     const fd = new FormData(e.target);
     const data = Object.fromEntries(fd.entries());
     startRun(data);

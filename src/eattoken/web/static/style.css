@@ -330,6 +330,19 @@ body {
   white-space: nowrap;
 }
 
+.usage-note {
+  margin: 0.75rem 0 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
+.field-hint {
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.4;
+}
+
 .log-panel {
   min-height: 280px;
   flex: 1;

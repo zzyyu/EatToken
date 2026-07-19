@@ -112,10 +112,17 @@ def _run_cli(args: argparse.Namespace) -> None:
                 summary["failed_requests"] += 1
             request_no = result.request_id
             if result.success:
+                accuracy = (
+                    result.prompt_tokens / result.requested_input_tokens * 100
+                    if result.requested_input_tokens > 0
+                    else 0
+                )
                 console.print(
                     f"[green]OK[/green] Request #{request_no} | "
                     f"prompt={result.prompt_tokens:,} completion={result.completion_tokens:,} "
-                    f"total={result.total_tokens:,} latency={result.latency_ms:.0f}ms"
+                    f"total={result.total_tokens:,} target_input={result.requested_input_tokens:,} "
+                    f"accuracy={accuracy:.1f}% cached={result.cached_tokens:,} "
+                    f"reasoning={result.reasoning_tokens:,} latency={result.latency_ms:.0f}ms"
                 )
             else:
                 console.print(
@@ -125,7 +132,9 @@ def _run_cli(args: argparse.Namespace) -> None:
 
         def _on_dispatch(metadata) -> None:
             console.print(
-                f"[cyan]SENDING[/cyan] Request #{metadata.request_id} | input≈{metadata.input_tokens:,} "
+                f"[cyan]SENDING[/cyan] Request #{metadata.request_id} | "
+                f"target_input={metadata.input_tokens:,} "
+                f"local_estimate={metadata.local_estimated_input_tokens:,} "
                 f"language={metadata.language} topic={metadata.topic}"
             )
 
@@ -186,9 +195,13 @@ def _run_cli(args: argparse.Namespace) -> None:
 
         console.print(
             f"\n[green]{t('status_done', lang=lang)}[/green] "
-            f"Total tokens: {summary['total_tokens']:,} | "
-            f"Requests: {summary['total_requests']} | "
-            f"Failed: {summary['failed_requests']}"
+            f"API tokens: {engine_summary.total_tokens:,} | "
+            f"Prompt: {engine_summary.prompt_tokens:,} | "
+            f"Completion: {engine_summary.completion_tokens:,} | "
+            f"Cached: {engine_summary.cached_tokens:,} | "
+            f"Reasoning: {engine_summary.reasoning_tokens:,} | "
+            f"Requests: {engine_summary.total_requests} | "
+            f"Failed: {engine_summary.failed_requests}"
         )
 
     asyncio.run(_run())

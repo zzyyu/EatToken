@@ -52,6 +52,10 @@ def _public_state(state: dict, logs: list[dict] | None = None) -> dict:
         "running": state["running"],
         "target": state["target_tokens"],
         "total_tokens": summary.total_tokens,
+        "prompt_tokens": summary.prompt_tokens,
+        "completion_tokens": summary.completion_tokens,
+        "cached_tokens": summary.cached_tokens,
+        "reasoning_tokens": summary.reasoning_tokens,
         "total_requests": summary.total_requests,
         "failed_requests": summary.failed_requests,
         "in_flight": state.get("in_flight", 0),
@@ -195,7 +199,8 @@ async def start_run(request: Request) -> JSONResponse:
             _active_runs[run_id]["in_flight"] += 1
             _append_log(
                 _active_runs[run_id],
-                f"Request #{metadata.request_id} SENDING | input≈{metadata.input_tokens:,} "
+                f"Request #{metadata.request_id} SENDING | target_input={metadata.input_tokens:,} "
+                f"local_estimate={metadata.local_estimated_input_tokens:,} "
                 f"language={metadata.language} topic={metadata.topic}",
             )
 
@@ -222,10 +227,17 @@ async def start_run(request: Request) -> JSONResponse:
                 st["qps"] = st["summary"].total_requests / elapsed
             request_no = result.request_id
             if result.success:
+                accuracy = (
+                    result.prompt_tokens / result.requested_input_tokens * 100
+                    if result.requested_input_tokens > 0
+                    else 0
+                )
                 _append_log(
                     st,
                     f"Request #{request_no} OK | prompt={result.prompt_tokens:,} "
                     f"completion={result.completion_tokens:,} total={result.total_tokens:,} "
+                    f"target_input={result.requested_input_tokens:,} accuracy={accuracy:.1f}% "
+                    f"cached={result.cached_tokens:,} reasoning={result.reasoning_tokens:,} "
                     f"latency={result.latency_ms:.0f}ms",
                 )
             else:
@@ -268,7 +280,9 @@ async def start_run(request: Request) -> JSONResponse:
             _append_log(
                 state,
                 f"Run finished | reason={summary.stop_reason or 'unknown'} "
-                f"requests={summary.total_requests:,} tokens={summary.total_tokens:,} "
+                f"requests={summary.total_requests:,} api_tokens={summary.total_tokens:,} "
+                f"prompt={summary.prompt_tokens:,} completion={summary.completion_tokens:,} "
+                f"cached={summary.cached_tokens:,} reasoning={summary.reasoning_tokens:,} "
                 f"failed={summary.failed_requests:,}",
             )
 

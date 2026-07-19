@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, patch
-from eattoken.providers.google import GoogleProvider
+from eattoken.providers.google import GoogleProvider, _result_from_usage
 from eattoken.core.models import Capabilities, ProviderType, Turn, RequestResult
 
 
@@ -34,3 +34,15 @@ def test_google_format_messages():
     turns = [Turn(role="user", content="hi"), Turn(role="assistant", content="bye")]
     out = p.format_messages(turns)
     assert out == [{"role": "user", "parts": [{"text": "hi"}]}, {"role": "assistant", "parts": [{"text": "bye"}]}]
+
+
+def test_google_uses_all_api_usage_metadata_fields():
+    result = _result_from_usage({
+        "promptTokenCount": 100,
+        "candidatesTokenCount": 20,
+        "thoughtsTokenCount": 30,
+        "cachedContentTokenCount": 40,
+        "totalTokenCount": 150,
+    })
+    assert (result.prompt_tokens, result.completion_tokens, result.total_tokens) == (100, 20, 150)
+    assert (result.cached_tokens, result.reasoning_tokens) == (40, 30)

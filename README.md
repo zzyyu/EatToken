@@ -29,7 +29,7 @@ Run `python run.py` and a browser window opens automatically. Fill in the form:
 | API Key | Yes | Your API key |
 | Provider | Yes | `auto` (default), `openai`, `anthropic`, or `google` |
 | Model | Yes | Model name, e.g. `gpt-4o` |
-| Target Tokens | No | Stop after consuming this many tokens |
+| Target API Tokens | No | Stop after the API reports this many total usage tokens; this is not a provider credit target |
 | Context Size Override | No | Override the registry/fallback context window |
 | Request Size | No | Input tokens per request (default: 1024) |
 | Max Output Tokens | No | Max tokens per response (default: 256) |
@@ -37,6 +37,10 @@ Run `python run.py` and a browser window opens automatically. Fill in the form:
 | Concurrency Override | No | Fixed parallelism; blank starts at 1 and adapts to the recommended ceiling |
 
 Leave Target Tokens blank to run until manually stopped. Protocol detection uses non-generating model-list requests. Each generated request has a distinct ID and rotates English/Chinese topics so concurrent payloads are not identical.
+
+The runtime counters use the provider response's `usage` fields, split into prompt, completion, cached-input, and reasoning tokens where the protocol supplies them. Provider quota pages may show billing units such as Step Plan Credit; those units are priced from model usage and are not a 1:1 token counter. EatToken also calibrates each prompt language against returned prompt usage so a requested input size describes the provider-side token count instead of only a local tokenizer estimate.
+
+Web form values are stored in browser `localStorage` and restored on the next visit, including the API key. Treat the browser profile as trusted because local storage is not an encrypted secret store. Runtime totals and the stopping target use only token usage returned by the provider API; local token estimates are used solely to size the next request.
 
 Both the Web request panel and the server terminal print `SENDING`, five-second `WAITING` heartbeats, and the final `OK`, `FAILED`, or timeout result. This makes a slow upstream response distinguishable from a request that was never sent.
 

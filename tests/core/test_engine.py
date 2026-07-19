@@ -117,6 +117,43 @@ async def test_dispatch_callback_runs_before_completion_with_metadata():
     assert {item.request_id for item in completed} == {1, 2}
 
 
+class LanguageSkewProvider(FakeProvider):
+    def __init__(self):
+        super().__init__(api_url="http://x", api_key="k", model="m")
+        self.zh_prompt_sizes = []
+
+    async def send(self, messages, options):
+        prompt = messages[0].content
+        local_size = self.count_tokens(prompt)
+        is_zh = "正常 API 吞吐测试" in prompt
+        if is_zh:
+            self.zh_prompt_sizes.append(local_size)
+        provider_prompt_tokens = local_size // 2 if is_zh else local_size
+        return RequestResult(
+            success=True,
+            prompt_tokens=provider_prompt_tokens,
+            total_tokens=provider_prompt_tokens,
+        )
+
+
+@pytest.mark.anyio
+async def test_engine_calibrates_each_language_from_provider_usage():
+    provider = LanguageSkewProvider()
+    engine = Engine(
+        provider=provider,
+        concurrency=1,
+        target_tokens=100,
+        context_size=100,
+        max_input_tokens=20,
+    )
+
+    summary = await engine.run()
+
+    assert summary.prompt_tokens >= 100
+    assert len(provider.zh_prompt_sizes) >= 2
+    assert provider.zh_prompt_sizes[1] > provider.zh_prompt_sizes[0]
+
+
 class HangingProvider(FakeProvider):
     async def send(self, messages, options):
         await asyncio.sleep(1)

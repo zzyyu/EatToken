@@ -8,6 +8,24 @@ from eattoken.core.models import Capabilities, ProviderType, RequestResult, Turn
 from eattoken.known_models.registry import lookup
 
 
+def _result_from_usage(usage: dict[str, Any]) -> RequestResult:
+    prompt_details = usage.get("prompt_tokens_details") or {}
+    completion_details = usage.get("completion_tokens_details") or {}
+    prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)
+    completion_tokens = int(usage.get("completion_tokens", 0) or 0)
+    total_tokens = int(usage.get("total_tokens", 0) or 0)
+    if total_tokens == 0:
+        total_tokens = prompt_tokens + completion_tokens
+    return RequestResult(
+        success=True,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        cached_tokens=int(prompt_details.get("cached_tokens", usage.get("cached_tokens", 0)) or 0),
+        reasoning_tokens=int(completion_details.get("reasoning_tokens", 0) or 0),
+    )
+
+
 class OpenAIProvider(Provider):
     def __init__(self, api_url: str, api_key: str, model: str):
         super().__init__(api_url=api_url, api_key=api_key, model=model)
@@ -56,13 +74,7 @@ class OpenAIProvider(Provider):
                             success=False,
                             error=f"HTTP {resp.status}: {body.get('error', {}).get('message', str(body))}",
                         )
-                    usage = body.get("usage", {})
-                    return RequestResult(
-                        success=True,
-                        prompt_tokens=usage.get("prompt_tokens", 0),
-                        completion_tokens=usage.get("completion_tokens", 0),
-                        total_tokens=usage.get("total_tokens", 0),
-                    )
+                    return _result_from_usage(body.get("usage", {}))
         except (aiohttp.ClientError, asyncio.TimeoutError) as exc:
             return RequestResult(success=False, error=f"{type(exc).__name__}: {exc}")
 

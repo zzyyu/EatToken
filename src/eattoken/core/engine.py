@@ -14,6 +14,10 @@ from eattoken.providers.base import Provider
 @dataclass
 class EngineSummary:
     total_tokens: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cached_tokens: int = 0
+    reasoning_tokens: int = 0
     total_requests: int = 0
     failed_requests: int = 0
     last_error: str | None = None
@@ -70,6 +74,7 @@ class Engine:
         self._wait_log_interval = wait_log_interval_seconds
         self._generator = Generator(provider, context_size=self._context_size, language="mixed")
         self._request_sequence = 0
+        self._token_ratio_by_language: dict[str, float] = {"en": 1.0, "zh": 1.0}
         self._stop_event = asyncio.Event()
         self._active_tasks: set[asyncio.Task[RequestResult]] = set()
 
@@ -127,6 +132,16 @@ class Engine:
         self.summary.total_requests += 1
         if result.success:
             self.summary.total_tokens += result.total_tokens
+            self.summary.prompt_tokens += result.prompt_tokens
+            self.summary.completion_tokens += result.completion_tokens
+            self.summary.cached_tokens += result.cached_tokens
+            self.summary.reasoning_tokens += result.reasoning_tokens
+            if metadata.local_estimated_input_tokens > 0 and result.prompt_tokens > 0:
+                observed_ratio = result.prompt_tokens / metadata.local_estimated_input_tokens
+                previous_ratio = self._token_ratio_by_language[metadata.language]
+                self._token_ratio_by_language[metadata.language] = (
+                    observed_ratio if previous_ratio == 1.0 else previous_ratio * 0.25 + observed_ratio * 0.75
+                )
         else:
             self.summary.failed_requests += 1
             self.summary.last_error = result.error or "request failed"
@@ -163,10 +178,14 @@ class Engine:
             tasks: set[asyncio.Task[RequestResult]] = set()
             for _ in range(request_count):
                 self._request_sequence += 1
-                generated = self._generator.build(input_budget, self._request_sequence)
+                language = "zh" if self._request_sequence % 2 == 0 else "en"
+                ratio = max(0.25, self._token_ratio_by_language[language])
+                local_target = max(1, math.ceil(input_budget / ratio))
+                generated = self._generator.build(local_target, self._request_sequence)
                 metadata = RequestMetadata(
                     request_id=self._request_sequence,
-                    input_tokens=generated.token_count,
+                    input_tokens=input_budget,
+                    local_estimated_input_tokens=generated.token_count,
                     language=generated.language,
                     topic=generated.topic,
                 )
@@ -218,9 +237,11 @@ class Engine:
 
     def _input_cap(self) -> int:
         context_size = max(1, self._context_size)
+        output_reserve = max(0, self._max_output or 0)
+        available_input = max(1, context_size - output_reserve)
         if self._max_input is not None:
-            return max(1, min(self._max_input, context_size - 1 if context_size > 1 else 1))
-        return max(1, int(context_size * 0.8))
+            return max(1, min(self._max_input, available_input))
+        return max(1, int(available_input * 0.8))
 
     def _build_prompt(self, target_input: int | None = None) -> str:
         """Compatibility helper retained for callers and tests."""

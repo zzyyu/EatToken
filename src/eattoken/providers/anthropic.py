@@ -7,6 +7,21 @@ from eattoken.core.models import Capabilities, ProviderType, RequestResult, Turn
 from eattoken.known_models.registry import lookup
 
 
+def _result_from_usage(usage: dict[str, Any]) -> RequestResult:
+    uncached_input = int(usage.get("input_tokens", 0) or 0)
+    cache_creation = int(usage.get("cache_creation_input_tokens", 0) or 0)
+    cache_read = int(usage.get("cache_read_input_tokens", 0) or 0)
+    prompt_tokens = uncached_input + cache_creation + cache_read
+    completion_tokens = int(usage.get("output_tokens", 0) or 0)
+    return RequestResult(
+        success=True,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=prompt_tokens + completion_tokens,
+        cached_tokens=cache_creation + cache_read,
+    )
+
+
 class AnthropicProvider(Provider):
     def __init__(self, api_url: str, api_key: str, model: str):
         super().__init__(api_url=api_url, api_key=api_key, model=model)
@@ -50,13 +65,7 @@ class AnthropicProvider(Provider):
                         success=False,
                         error=f"HTTP {resp.status}: {body.get('error', {}).get('message', str(body))}",
                     )
-                usage = body.get("usage", {})
-                return RequestResult(
-                    success=True,
-                    prompt_tokens=usage.get("input_tokens", 0),
-                    completion_tokens=usage.get("output_tokens", 0),
-                    total_tokens=usage.get("input_tokens", 0) + usage.get("output_tokens", 0),
-                )
+                return _result_from_usage(body.get("usage", {}))
 
     async def send(self, messages: list[Turn], options: dict[str, Any]) -> RequestResult:
         base = self.api_url.rstrip("/")

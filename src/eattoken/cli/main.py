@@ -111,10 +111,17 @@ def run(
                 summary["failed_requests"] += 1
             request_no = result.request_id
             if result.success:
+                accuracy = (
+                    result.prompt_tokens / result.requested_input_tokens * 100
+                    if result.requested_input_tokens > 0
+                    else 0
+                )
                 console.print(
                     f"[green]OK[/green] Request #{request_no} | "
                     f"prompt={result.prompt_tokens:,} completion={result.completion_tokens:,} "
-                    f"total={result.total_tokens:,} latency={result.latency_ms:.0f}ms"
+                    f"total={result.total_tokens:,} target_input={result.requested_input_tokens:,} "
+                    f"accuracy={accuracy:.1f}% cached={result.cached_tokens:,} "
+                    f"reasoning={result.reasoning_tokens:,} latency={result.latency_ms:.0f}ms"
                 )
             else:
                 console.print(
@@ -124,7 +131,9 @@ def run(
 
         def on_dispatch(metadata) -> None:
             console.print(
-                f"[cyan]SENDING[/cyan] Request #{metadata.request_id} | input≈{metadata.input_tokens:,} "
+                f"[cyan]SENDING[/cyan] Request #{metadata.request_id} | "
+                f"target_input={metadata.input_tokens:,} "
+                f"local_estimate={metadata.local_estimated_input_tokens:,} "
                 f"language={metadata.language} topic={metadata.topic}"
             )
 
@@ -178,14 +187,18 @@ def run(
             updater = asyncio.create_task(_update())
             engine_summary = await engine.run()
             updater.cancel()
-            update = {"tokens": summary["total_tokens"]}
+            update = {"tokens": engine_summary.total_tokens}
             if target_tokens:
-                update["completed"] = min(summary["total_tokens"], target_tokens)
+                update["completed"] = min(engine_summary.total_tokens, target_tokens)
             progress.update(task, **update)
 
         console.print(
-            f"\nDone. Total tokens: {summary['total_tokens']:,} | "
-            f"Requests: {summary['total_requests']} | Failed: {summary['failed_requests']}"
+            f"\nDone. API tokens: {engine_summary.total_tokens:,} | "
+            f"Prompt: {engine_summary.prompt_tokens:,} | "
+            f"Completion: {engine_summary.completion_tokens:,} | "
+            f"Cached: {engine_summary.cached_tokens:,} | "
+            f"Reasoning: {engine_summary.reasoning_tokens:,} | "
+            f"Requests: {engine_summary.total_requests} | Failed: {engine_summary.failed_requests}"
         )
 
     asyncio.run(_run())

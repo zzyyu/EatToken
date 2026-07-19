@@ -81,6 +81,7 @@ def test_current_run_restores_backend_stats_config_and_request_logs(monkeypatch)
             "model": "gpt-4o",
             "target_tokens": "20",
             "max_input_tokens": "8",
+            "max_output_tokens": "2",
             "concurrency": "1",
         })
         assert started.status_code == 200
@@ -94,11 +95,17 @@ def test_current_run_restores_backend_stats_config_and_request_logs(monkeypatch)
 
         assert run is not None
         assert run["total_tokens"] >= 20
+        assert run["prompt_tokens"] >= 16
+        assert run["completion_tokens"] >= 4
+        assert run["cached_tokens"] == 0
+        assert run["reasoning_tokens"] == 0
         assert run["config"]["target_tokens"] == 20
         assert run["config"]["api_url"] == "http://fake/v1"
         assert "api_key" not in run["config"]
         assert any("Capabilities | protocol=openai" in entry["message"] for entry in run["logs"])
         assert any("Request #1 SENDING" in entry["message"] for entry in run["logs"])
+        assert any("target_input=8" in entry["message"] for entry in run["logs"])
+        assert any("local_estimate=8" in entry["message"] for entry in run["logs"])
         assert any("Request #1 OK" in entry["message"] for entry in run["logs"])
         assert any("prompt=8" in entry["message"] for entry in run["logs"])
         assert any("Run finished" in entry["message"] for entry in run["logs"])

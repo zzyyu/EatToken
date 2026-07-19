@@ -35,7 +35,10 @@ class Generator:
         return "zh" if request_id % 2 == 0 else "en"
 
     def build(self, target_tokens: int, request_id: int) -> GeneratedPrompt:
-        target = max(1, min(target_tokens, self.context_size))
+        # The provider tokenizer may differ from the local estimator. Engine
+        # calibrates the target after observing real usage, so the local target
+        # can legitimately be larger than the provider context number.
+        target = max(1, target_tokens)
         language = self._language_for(request_id)
         questions = self.questions.get(language, []) or ["Discuss {topic} in detail."]
         topics = self.topics.get(language, []) or ["technology"]

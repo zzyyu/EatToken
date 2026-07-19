@@ -7,6 +7,23 @@ from eattoken.core.models import Capabilities, ProviderType, RequestResult, Turn
 from eattoken.known_models.registry import lookup
 
 
+def _result_from_usage(usage: dict[str, Any]) -> RequestResult:
+    prompt_tokens = int(usage.get("promptTokenCount", 0) or 0)
+    completion_tokens = int(usage.get("candidatesTokenCount", 0) or 0)
+    reasoning_tokens = int(usage.get("thoughtsTokenCount", 0) or 0)
+    total_tokens = int(usage.get("totalTokenCount", 0) or 0)
+    if total_tokens == 0:
+        total_tokens = prompt_tokens + completion_tokens + reasoning_tokens
+    return RequestResult(
+        success=True,
+        prompt_tokens=prompt_tokens,
+        completion_tokens=completion_tokens,
+        total_tokens=total_tokens,
+        cached_tokens=int(usage.get("cachedContentTokenCount", 0) or 0),
+        reasoning_tokens=reasoning_tokens,
+    )
+
+
 class GoogleProvider(Provider):
     def __init__(self, api_url: str, api_key: str, model: str):
         super().__init__(api_url=api_url, api_key=api_key, model=model)
@@ -47,13 +64,7 @@ class GoogleProvider(Provider):
                 body = await resp.json()
                 if resp.status != 200:
                     return RequestResult(success=False, error=f"HTTP {resp.status}: {body}")
-                usage = body.get("usageMetadata", {})
-                return RequestResult(
-                    success=True,
-                    prompt_tokens=usage.get("promptTokenCount", 0),
-                    completion_tokens=usage.get("candidatesTokenCount", 0),
-                    total_tokens=usage.get("totalTokenCount", 0),
-                )
+                return _result_from_usage(body.get("usageMetadata", {}))
 
     async def send(self, messages: list[Turn], options: dict[str, Any]) -> RequestResult:
         api_key = self.api_key
